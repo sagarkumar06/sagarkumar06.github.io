@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Airline Chatbot</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f8ff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      flex-direction: column;
+    }
+
+    #chatbox {
+      width: 100%;
+      max-width: 500px;
+      background: rgb(45, 129, 115);
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+
+    #chatlog {
+      height: 400px;
+      overflow-y: auto;
+      padding-right: 10px;
+      margin-bottom: 15px;
+    }
+
+    .message {
+      margin: 10px 0;
+      padding: 10px 15px;
+      border-radius: 15px;
+      max-width: 80%;
+      word-wrap: break-word;
+      position: relative;
+    }
+
+    .user {
+      background: #cce5ff;
+      align-self: flex-end;
+      margin-left: auto;
+      text-align: right;
+    }
+
+    .bot {
+      background: #e2f0cb;
+      align-self: flex-start;
+      margin-right: auto;
+      text-align: left;
+    }
+
+    .timestamp {
+      display: block;
+      font-size: 0.7em;
+      color: gray;
+      margin-top: 5px;
+    }
+
+    #inputArea {
+      display: flex;
+    }
+
+    input[type="text"] {
+      flex-grow: 1;
+      padding: 10px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+    }
+
+    button {
+      padding: 10px 15px;
+      border: none;
+      background-color: #007bff;
+      color: white;
+      border-radius: 5px;
+      margin-left: 10px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    #calendarContainer, #chartContainer {
+      display: none;
+      margin-top: 15px;
+      padding: 15px;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 500px;
+    }
+
+    canvas {
+      width: 100% !important;
+      height: auto !important;
+    }
+  </style>
+</head>
+<body>
+
+<div id="chatbox">
+  <div id="chatlog"></div>
+  <div id="inputArea">
+    <input type="text" id="userInput" placeholder="Ask me anything about your flight..." onkeydown="if(event.key==='Enter') sendMessage()">
+    <button onclick="sendMessage()">Send</button>
+  </div>
+</div>
+
+<div id="calendarContainer">
+  <label for="flightDate">Select your travel date:</label>
+  <input type="date" id="flightDate" onchange="handleDateChange(event)">
+</div>
+
+<div id="chartContainer">
+  <canvas id="priceChart"></canvas>
+</div>
+
+<script>
+  const chatlog = document.getElementById('chatlog');
+
+  function sendMessage() {
+    const input = document.getElementById('userInput');
+    const message = input.value.trim();
+    if (message === '') return;
+
+    addMessage(message, 'user');
+    input.value = '';
+    respond(message.toLowerCase());
+  }
+
+  function addMessage(text, sender) {
+    const msg = document.createElement('div');
+    msg.className = 'message ' + sender;
+
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    msg.innerHTML = `${text}<span class="timestamp">${timestamp}</span>`;
+    chatlog.appendChild(msg);
+    chatlog.scrollTop = chatlog.scrollHeight;
+  }
+
+  function respond(message) {
+    const responseMap = [
+      {
+        keywords: ['hello', 'hi', 'hey'],
+        replies: [
+          "Welcome to our Airlines! ✈️ How may I assist you today?",
+          "Hi there! Ready to fly? How can I help you?",
+          "Hello! Need help with booking or checking your flight?"
+        ]
+      },
+      {
+        keywords: ['book', 'ticket', 'reservation'],
+        replies: [
+          "To book a ticket, please visit our booking page or tell me your preferred route and date.",
+          "I'd be happy to help you book. Where would you like to go and when?",
+          "Booking made easy! Just provide your origin, destination, and travel date."
+        ]
+      },
+      {
+        keywords: ['flight status', 'status', 'delayed', 'on time'],
+        replies: [
+          "Please provide your flight number, and I’ll check the status for you.",
+          "Sure, I can help with that! What's your flight number?",
+          "To check your flight status, I need the flight number and date."
+        ]
+      },
+      {
+        keywords: ['check in', 'boarding pass'],
+        replies: [
+          "Online check-in opens 24 hours before departure. Want me to send you the link?",
+          "You can check in via our website or app. Need help with that?",
+          "Just give me your booking reference and I’ll guide you through check-in!"
+        ]
+      },
+      {
+        keywords: ['baggage', 'luggage'],
+        replies: [
+          "You’re allowed one carry-on and one checked bag. Need detailed weight info?",
+          "Lost or delayed baggage? Let me know your baggage tag or booking ID.",
+          "You can track your baggage in our app using your booking reference."
+        ]
+      },
+      {
+        keywords: ['price', 'fare', 'cost'],
+        replies: [
+          "Sure! Please select your travel date to view the flight fare chart below.",
+          "Select a date using the calendar below to check available prices.",
+          "I can show you prices for the upcoming week — choose a date below!"
+        ],
+        showCalendar: true
+      },
+      {
+        keywords: ['bye', 'thank', 'thanks'],
+        replies: [
+          "Safe travels! If you need anything else, I'm here. 👋",
+          "Thank you for choosing our Airlines. Have a great flight!",
+          "You're welcome! Have a wonderful journey! ✈️"
+        ]
+      }
+    ];
+
+    let matched = false;
+
+    for (const entry of responseMap) {
+      for (const keyword of entry.keywords) {
+        if (message.includes(keyword)) {
+          const reply = entry.replies[Math.floor(Math.random() * entry.replies.length)];
+          setTimeout(() => addMessage(reply, 'bot'), 600);
+
+          if (entry.showCalendar) {
+            setTimeout(() => {
+              document.getElementById("calendarContainer").style.display = "block";
+              document.getElementById("chartContainer").style.display = "none";
+            }, 1000);
+          }
+
+          matched = true;
+          break;
+        }
+      }
+      if (matched) break;
+    }
+
+    if (!matched) {
+      const defaultReplies = [
+        "I'm here to help with bookings, check-in, flight status, and baggage info.",
+        "Could you please rephrase that or give me more details?",
+        "Hmm, I didn't get that. Try asking about booking, flight status, or baggage."
+      ];
+      const reply = defaultReplies[Math.floor(Math.random() * defaultReplies.length)];
+      setTimeout(() => addMessage(reply, 'bot'), 600);
+    }
+  }
+
+  function handleDateChange(event) {
+    const selectedDate = event.target.value;
+    addMessage("You selected: " + selectedDate, "user");
+    addMessage("Fetching price chart for your selected week...", "bot");
+    document.getElementById("chartContainer").style.display = "block";
+    showPriceChart();
+  }
+
+  function showPriceChart() {
+    const ctx = document.getElementById('priceChart').getContext('2d');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+        datasets: [{
+          label: "Flight Price (₹)",
+          data: [5200, 5000, 4700, 6000, 5800, 4900, 5300],
+          borderColor: "#007bff",
+          backgroundColor: "rgba(0,123,255,0.1)",
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: { beginAtZero: false }
+        }
+      }
+    });
+  }
+</script>
+
+</body>
+</html>
