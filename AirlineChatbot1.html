@@ -6,7 +6,281 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
+      font-family: 'Segoe UI', sans-serif;<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Airline Chatbot with Multiple Replies</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
       font-family: 'Segoe UI', sans-serif;
+      background: #f0f8ff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    #chatbox {
+      width: 400px;
+      background: rgb(45, 129, 115);
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    #chatlog {
+      height: 350px;
+      overflow-y: auto;
+      margin-bottom: 10px;
+      padding-right: 5px;
+    }
+    .message {
+      margin: 10px 0;
+      padding: 10px 15px;
+      border-radius: 15px;
+      max-width: 80%;
+      word-wrap: break-word;
+    }
+    .user {
+      background: #cce5ff;
+      align-self: flex-end;
+      margin-left: auto;
+      text-align: right;
+    }
+    .bot {
+      background: #e2f0cb;
+      align-self: flex-start;
+      margin-right: auto;
+      text-align: left;
+    }
+    .timestamp {
+      display: block;
+      font-size: 0.7em;
+      color: gray;
+      margin-top: 5px;
+    }
+    #inputArea {
+      display: flex;
+      gap: 5px;
+    }
+    input[type="text"], input[type="date"] {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    button {
+      padding: 10px 15px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    #calendarContainer, #chartContainer {
+      display: none;
+      margin-top: 10px;
+      padding: 10px;
+      background: white;
+      border-radius: 10px;
+    }
+    #priceChart {
+      width: 100%;
+      height: 200px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="chatbox">
+  <div id="chatlog"></div>
+
+  <div id="calendarContainer">
+    <label for="travelDate">Select a Travel Date:</label>
+    <input type="date" id="travelDate" onchange="handleDateSelection()">
+  </div>
+
+  <div id="chartContainer">
+    <canvas id="priceChart"></canvas>
+  </div>
+
+  <div id="inputArea">
+    <input type="text" id="userInput" placeholder="Type your message..." onkeydown="if(event.key==='Enter') sendMessage()">
+    <button onclick="sendMessage()">Send</button>
+  </div>
+</div>
+
+<script>
+const chatlog = document.getElementById('chatlog');
+let waitingForAction = false;
+let waitingForCalendar = false;
+
+function sendMessage() {
+  const input = document.getElementById('userInput');
+  const message = input.value.trim();
+  if (message === '') return;
+
+  addMessage(message, 'user');
+  input.value = '';
+  respond(message.toLowerCase());
+}
+
+function addMessage(text, sender) {
+  const msgDiv = document.createElement('div');
+  msgDiv.className = 'message ' + sender;
+  const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  msgDiv.innerHTML = `${text}<span class="timestamp">${timestamp}</span>`;
+  chatlog.appendChild(msgDiv);
+  chatlog.scrollTop = chatlog.scrollHeight;
+}
+
+function respond(message) {
+  if (waitingForAction && (message.includes('cancel') || message.includes('stop'))) {
+    waitingForAction = false;
+    waitingForCalendar = false;
+    document.getElementById('calendarContainer').style.display = "none";
+    document.getElementById('chartContainer').style.display = "none";
+    addMessage("Okay, the process has been canceled. Let me know if you need anything else. ❌", 'bot');
+    return;
+  }
+
+  const responseMap = [
+    {
+      keywords: ['hello there', 'hi', 'hey', 'good morning', 'good evening'],
+      replies: [
+        "Welcome to our Airlines! ✈️ How may I assist you today?",
+        "Hi traveler! ✈️ What can I help you with?",
+        "Hello! Need help with booking or checking your flight?"
+      ]
+    },
+    {
+      keywords: ['book a ticket', 'i want to book ticket', 'ticket booking', 'make a reservation', 'reserve a seat'],
+      replies: [
+        "Sure! Please tell me your travel details. (You can type 'cancel' anytime.)",
+        "Where would you like to fly? Tell me your origin and destination. ✈️",
+        "Booking made easy! Give me your travel route and dates."
+      ],
+      waiting: true
+    },
+    {
+      keywords: ['flight status', 'check my flight status', 'is my flight delayed', 'flight delayed', 'on time flight'],
+      replies: [
+        "Please provide your flight number, and I’ll check the status for you.",
+        "Sure thing! What's your flight number?",
+        "I'll fetch the latest status for you. Share your flight number please."
+      ],
+      waiting: true
+    },
+    {
+      keywords: ['cancel my ticket', 'ticket cancellation', 'i want to cancel my ticket', 'cancel booking'],
+      replies: [
+        "No problem! Please give me your booking ID to cancel.",
+        "Ticket cancellation started! Share your booking reference.",
+        "Sure, we can cancel it. Please send me your booking number."
+      ],
+      waiting: true
+    },
+    {
+      keywords: ['flight price', 'flight fare', 'flight cost', 'ticket price', 'show me prices'],
+      replies: [
+        "Sure! Please select your travel date below to view average prices 📅.",
+        "Pick a travel date and I’ll show you the available average fares! 🎫",
+        "Select your date to check today's best flight deals with average prices."
+      ],
+      calendar: true
+    },
+    {
+      keywords: ['bye', 'OK!! thank you', 'thanks', 'goodbye', 'see you'],
+      replies: [
+        "Safe travels! 👋 Thank you for choosing Sky Airlines.",
+        "Goodbye and have a wonderful journey! ✈️",
+        "Thank you for connecting with us. Wishing you a great flight!"
+      ]
+    }
+  ];
+
+  let found = false;
+  for (const entry of responseMap) {
+    for (const keyword of entry.keywords) {
+      if (message.includes(keyword)) {
+        const reply = entry.replies[Math.floor(Math.random() * entry.replies.length)]; // Random reply
+        setTimeout(() => addMessage(reply, 'bot'), 500);
+
+        if (entry.waiting) {
+          waitingForAction = true;
+        }
+        if (entry.calendar) {
+          waitingForCalendar = true;
+          showCalendar();
+        }
+
+        found = true;
+        break;
+      }
+    }
+    if (found) break;
+  }
+
+  if (!found) {
+    const defaultReplies = [
+      "I'm here to assist you with flights, bookings, prices, and cancellations!",
+      "Could you please rephrase that?",
+      "Sorry, I didn’t catch that. Can you ask differently?"
+    ];
+    const reply = defaultReplies[Math.floor(Math.random() * defaultReplies.length)];
+    setTimeout(() => addMessage(reply, 'bot'), 600);
+  }
+}
+
+function showCalendar() {
+  document.getElementById('calendarContainer').style.display = "block";
+}
+
+function handleDateSelection() {
+  const date = document.getElementById('travelDate').value;
+  addMessage(`You selected: ${date}`, 'user');
+  addMessage("Fetching fare chart for you 📈...", 'bot');
+
+  document.getElementById('calendarContainer').style.display = "none";
+  document.getElementById('chartContainer').style.display = "block";
+
+  const ctx = document.getElementById('priceChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+      datasets: [{
+        label: "Price (₹)",
+        data: [6800, 7100, 6950, 7200, 6050, 8300, 9000], // ✅ Updated prices
+        borderColor: "#007bff",
+        backgroundColor: "rgba(0,123,255,0.2)",
+        fill: true,
+        tension: 0.3
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: { beginAtZero: false }
+      }
+    }
+  });
+
+  waitingForCalendar = false;
+}
+
+</script>
+
+</body>
+</html>
       background: #f0f8ff;
       display: flex;
       justify-content: center;
